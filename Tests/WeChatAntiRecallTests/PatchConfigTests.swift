@@ -820,6 +820,50 @@ final class PatchConfigTests: XCTestCase {
         XCTAssertTrue(RuntimeTipInstaller.supportedBuildVersions.contains("270135"))
     }
 
+    func testBuild270348SupportsInlineHookRecallPatchesAndUpdateBlock() throws {
+        // 270348 (WeChat 4.2.0.12): the 269574+ parser geometry still hits verbatim in the
+        // arm64 slice — 0x4e79f98..0x4e7b0b4 (4380 bytes), cbz w0,+0x208 guard at +0x270,
+        // str x0,[x19,#0x1c8] at +0xA10, fields +0x1C8/+0x1D0 re-decoded from this binary.
+        // Entry stubs were produced by the runtime's encodeEntryStub (round-trip verified).
+        let config = try XCTUnwrap(loadPatchConfigs().first { $0.version == "270348" })
+
+        XCTAssertEqual(config.targets.map(\.identifier), ["revoke", "revoke-tip", "update", "runtime-tip"])
+        XCTAssertTrue(config.targets.allSatisfy { $0.binary == "Contents/Resources/wechat.dylib" })
+        XCTAssertTrue(config.targets.flatMap(\.entries).allSatisfy { $0.arch == .arm64 })
+
+        let revoke = try XCTUnwrap(config.targets.first { $0.identifier == "revoke" }?.entries.first)
+        XCTAssertEqual(revoke.address, 0x4e7a208)
+        XCTAssertEqual(revoke.expectedBytes, [try Data(hexString: "40100034")])
+        XCTAssertEqual(revoke.patchBytes, try Data(hexString: "82000014"))
+        let tip = try XCTUnwrap(config.targets.first { $0.identifier == "revoke-tip" })
+        XCTAssertEqual(tip.entries.map(\.address), [0x4e7a208, 0x4e7a9a8])
+        XCTAssertEqual(tip.entries[0].expectedBytes, [try Data(hexString: "40100034"), try Data(hexString: "82000014")])
+        XCTAssertEqual(tip.entries[0].patchBytes, try Data(hexString: "40100034"))
+        XCTAssertEqual(tip.entries[1].expectedBytes, [try Data(hexString: "60E600F9")])
+        XCTAssertEqual(tip.entries[1].patchBytes, try Data(hexString: "7FE600F9"))
+
+        let update = try XCTUnwrap(config.targets.first { $0.identifier == "update" })
+        XCTAssertEqual(update.entries.map(\.address), [
+            0x291de4, 0x293f1c, 0x2941e0, 0x2945c0,
+            0x29e934, 0x29e93c, 0x29e944, 0x29e94c
+        ])
+        XCTAssertEqual(update.entries.map(\.expectedBytes), try [
+            "FC6FBBA9", "FFC305D1", "FF4301D1", "F657BDA9",
+            "00604039C0035FD6", "02600039", "00644039C0035FD6", "02640039"
+        ].map { [try Data(hexString: $0)] })
+        XCTAssertTrue(update.entries.allSatisfy { $0.patchBytes.suffix(4) == (try! Data(hexString: "C0035FD6")) })
+
+        let runtimeTip = try XCTUnwrap(config.targets.first { $0.identifier == "runtime-tip" })
+        XCTAssertEqual(runtimeTip.entries.count, 2)
+        XCTAssertEqual(runtimeTip.entries[0].address, 0x4e79f98)
+        XCTAssertEqual(runtimeTip.entries[0].expectedBytes, [try Data(hexString: "F85FBCA9F65701A9F44F02A9")])
+        XCTAssertEqual(runtimeTip.entries[0].patchBytes, try Data(hexString: "70C002D010FA47F900021FD6"))
+        XCTAssertEqual(runtimeTip.entries[1].address, 0x4e16b50)
+        XCTAssertEqual(runtimeTip.entries[1].expectedBytes, [try Data(hexString: "086049391F0500712008407A")])
+        XCTAssertEqual(runtimeTip.entries[1].patchBytes, try Data(hexString: "90C302B010FE47F900021FD6"))
+        XCTAssertTrue(RuntimeTipInstaller.supportedBuildVersions.contains("270348"))
+    }
+
     private func loadPatchConfigs() throws -> [VersionConfig] {
         let url = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
             .appendingPathComponent("patches.json")

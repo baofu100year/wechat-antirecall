@@ -263,6 +263,12 @@ constexpr InlineRevokeHookConfig inlineRevokeHookConfigs[] = {
     // +0x1C8/+0x1D0. SLOT 0xA52BFF0 lies in the __DATA zero-fill tail after
     // __common ends at 0xA52BEB8.
     {"270135", 0x4d1f8d8, {0xA9BC5FF8, 0xA90157F6, 0xA9024FF4}, 0x4d1f8e4, 0x1c8, 0x1d0},
+    // 270348 (WeChat 4.2.0.12): the 269574+ geometry still hits verbatim in the
+    // arm64 slice — parser 0x4E79F98..0x4E7B0B4 (4380 bytes) keeps the +0x270
+    // cbz w0,+0x208 guard, the +0xA10 newmsgid store and fields +0x1C8/+0x1D0
+    // (re-decoded from this binary's str/ldr). SLOT 0xA687FF0 lies in the
+    // __DATA zero-fill tail after __common ends at 0xA6866A8.
+    {"270348", 0x4e79f98, {0xA9BC5FF8, 0xA90157F6, 0xA9024FF4}, 0x4e79fa4, 0x1c8, 0x1d0},
 };
 
 constexpr InlineMessageCaptureHookConfig inlineMessageCaptureHookConfigs[] = {
@@ -496,6 +502,20 @@ constexpr InlineMessageCaptureHookConfig inlineMessageCaptureHookConfigs[] = {
         0x4cbc3ac,
         {0x39496008, 0x7100051F, 0x7A400820},
         0x4cbc3b8,
+        0x0f8,
+        0x00c,
+        0x130,
+    },
+    // 270348: finalizer 0x4E16B50..0x4E16C64 (276 bytes) keeps the ldrb/cmp/ccmp
+    // entry shape and the +0x258 early-return flag; 28 direct BL + 1 tail-B call
+    // sites. Network constructor 0x3095210 writes serverId +0xF8 at 0x3095498 and
+    // content +0x130 at 0x3095454; helper 0x4E164C4 writes msgType +0x0C before
+    // the finalizer call at 0x30954BC. SLOT is 0xA687FF8.
+    {
+        "270348",
+        0x4e16b50,
+        {0x39496008, 0x7100051F, 0x7A400820},
+        0x4e16b5c,
         0x0f8,
         0x00c,
         0x130,
