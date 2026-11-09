@@ -23,20 +23,37 @@ final class InstallReportStateTests: XCTestCase {
         XCTAssertEqual(InstallState.classify(decoded), .notInstalled)
     }
 
-    func testMixedAlreadyAndWouldApplyIsMismatch() throws {
+    // A mixed already*/would* report is NOT residue: no-op restore entries (e.g. the
+    // revoke-tip guard whose `asm` equals the original instruction) report
+    // alreadyPatched on a completely fresh binary while the real patches still
+    // report wouldPatch. Classifying that mix as mismatch permanently blocked
+    // every fresh customTip install behind the restore banner.
+    func testMixedAlreadyAndWouldApplyIsNotInstalled() throws {
         let decoded = try report(
             targetStates: ["alreadyPatched", "wouldPatch"],
             runtimeStates: ["alreadyInjected"])
 
-        XCTAssertEqual(InstallState.classify(decoded), .mismatch)
+        XCTAssertEqual(InstallState.classify(decoded), .notInstalled)
     }
 
-    func testMixedUpdateOnlyEntriesAreMismatch() throws {
+    func testMixedUpdateOnlyEntriesAreNotInstalled() throws {
         let decoded = try report(
             targetIdentifier: "update",
             targetStates: ["alreadyPatched", "wouldPatch"])
 
-        XCTAssertEqual(InstallState.classify(decoded), .mismatch)
+        XCTAssertEqual(InstallState.classify(decoded), .notInstalled)
+    }
+
+    // Regression for the fresh-customTip probe shape: the guard restore entry is
+    // already in its desired (original) state, the remaining byte patch and the
+    // dylib injection are pending — a clean installable state, not residue.
+    func testFreshCustomTipProbeIsNotInstalled() throws {
+        let decoded = try report(
+            targetIdentifier: "revoke-tip",
+            targetStates: ["alreadyPatched", "wouldPatch"],
+            runtimeStates: ["wouldInject"])
+
+        XCTAssertEqual(InstallState.classify(decoded), .notInstalled)
     }
 
     func testCleanMixedComposedReportIsInstallable() throws {
@@ -46,7 +63,7 @@ final class InstallReportStateTests: XCTestCase {
             additionalTargetIdentifier: "update",
             additionalTargetStates: ["alreadyPatched"])
 
-        XCTAssertEqual(InstallState.classify(decoded), .mismatch)
+        XCTAssertEqual(InstallState.classify(decoded), .notInstalled)
         XCTAssertEqual(InstallPreflightDisposition.classify(decoded), .installable)
     }
 

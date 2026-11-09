@@ -89,8 +89,13 @@ enum InstallState: Equatable {
         let applied: Set<String> = ["alreadyPatched", "alreadyInjected"]
         if states.allSatisfy(applied.contains) { return .installed }
 
+        // `alreadyPatched` is compatible with a clean install: some entries are
+        // no-op restore points (e.g. the revoke-tip guard keeps `asm == original`
+        // so an unpatched binary reports alreadyPatched) while the rest still
+        // need patching. Mixed already*/would* states are installable; true
+        // corruption surfaces as a bytesMismatch envelope, not a state mix.
         let wouldApply: Set<String> = ["wouldPatch", "wouldInject"]
-        if states.allSatisfy(wouldApply.contains) { return .notInstalled }
+        if states.allSatisfy({ applied.contains($0) || wouldApply.contains($0) }) { return .notInstalled }
 
         return .mismatch
     }
